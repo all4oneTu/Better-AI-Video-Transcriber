@@ -10,6 +10,7 @@ class Translator:
     
     def __init__(self):
         self.client = None
+        self.model  = "gpt-4o"
         self._init_openai_client()
         
         # 语言映射
@@ -134,7 +135,7 @@ class Translator:
         
         return final_chunks
     
-    async def translate_text(self, text: str, target_language: str, source_language: Optional[str] = None) -> str:
+    async def translate_text(self, text: str, target_language: str, source_language: Optional[str] = None, keep_markers: bool = False) -> str:
         """
         翻译文本到目标语言
         
@@ -167,16 +168,17 @@ class Translator:
             # 估算文本长度，决定是否需要分块
             if len(text) > 3000:
                 logger.info(f"文本较长({len(text)} chars)，启用分块翻译")
-                return await self._translate_with_chunks(text, target_lang_name, source_lang_name)
+                return await self._translate_with_chunks(text, target_lang_name, source_lang_name, keep_markers)
             else:
-                return await self._translate_single_text(text, target_lang_name, source_lang_name)
+                return await self._translate_single_text(text, target_lang_name, source_lang_name, keep_markers)
                 
         except Exception as e:
             logger.error(f"翻译失败: {str(e)}")
             return text
     
-    async def _translate_single_text(self, text: str, target_lang_name: str, source_lang_name: str) -> str:
+    async def _translate_single_text(self, text: str, target_lang_name: str, source_lang_name: str, keep_markers: bool = False) -> str:
         """翻译单个文本块"""
+        marker_rule = "\n- 文本中形如 **[MM:SS - MM:SS]** 的时间戳标记必须原样保留，不得翻译或修改。" if keep_markers else ""
         system_prompt = f"""你是专业翻译专家。请将{source_lang_name}文本准确翻译为{target_lang_name}。
 
 翻译要求：
@@ -184,7 +186,7 @@ class Translator:
 - 准确传达原意，语言自然流畅
 - 保留专业术语的准确性
 - 不要添加解释或注释
-- 如果遇到Markdown格式，请保持格式不变"""
+- 如果遇到Markdown格式，请保持格式不变{marker_rule}"""
 
         user_prompt = f"""请将以下{source_lang_name}文本翻译为{target_lang_name}：
 
@@ -194,7 +196,7 @@ class Translator:
 
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o",
+                model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -209,7 +211,7 @@ class Translator:
             logger.error(f"单文本翻译失败: {e}")
             return text
     
-    async def _translate_with_chunks(self, text: str, target_lang_name: str, source_lang_name: str) -> str:
+    async def _translate_with_chunks(self, text: str, target_lang_name: str, source_lang_name: str, keep_markers: bool = False) -> str:
         """分块翻译长文本"""
         chunks = self._smart_chunk_text(text, max_chars_per_chunk=4000)
         logger.info(f"分割为 {len(chunks)} 个块进行翻译")
@@ -219,6 +221,7 @@ class Translator:
         for i, chunk in enumerate(chunks):
             logger.info(f"正在翻译第 {i+1}/{len(chunks)} 块...")
             
+            marker_rule = "\n- 文本中形如 **[MM:SS - MM:SS]** 的时间戳标记必须原样保留，不得翻译或修改。" if keep_markers else ""
             system_prompt = f"""你是专业翻译专家。请将{source_lang_name}文本准确翻译为{target_lang_name}。
 
 这是完整文档的第{i+1}部分，共{len(chunks)}部分。
@@ -228,7 +231,7 @@ class Translator:
 - 准确传达原意，语言自然流畅
 - 保留专业术语的准确性
 - 不要添加解释或注释
-- 保持与前后文的连贯性"""
+- 保持与前后文的连贯性{marker_rule}"""
 
             user_prompt = f"""请将以下{source_lang_name}文本翻译为{target_lang_name}：
 
@@ -238,7 +241,7 @@ class Translator:
 
             try:
                 response = self.client.chat.completions.create(
-                    model="gpt-4o",
+                    model=self.model,
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt}

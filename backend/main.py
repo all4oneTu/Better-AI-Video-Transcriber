@@ -145,10 +145,210 @@ async def list_models(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+ALLOWED_UPLOAD_EXTENSIONS = {
+    '.mp3', '.mp4', '.wav', '.m4a', '.ogg', '.flac',
+    '.webm', '.mkv', '.avi', '.mov', '.aac', '.wma', '.opus', '.3gp'
+}
+
+@app.post("/api/process-file")
+async def process_uploaded_file(
+    file: UploadFile = File(...),
+    summary_language:     str = Form(default="zh"),
+    translation_language: str = Form(default=""),
+    api_key:        str = Form(default=""),
+    model_base_url: str = Form(default=""),
+    model_id:       str = Form(default=""),
+):
+    """Upload a local audio/video file and return a task ID."""
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{suffix}'. Allowed: {', '.join(sorted(ALLOWED_UPLOAD_EXTENSIONS))}",
+        )
+
+    task_id  = str(uuid.uuid4())
+    short_id = task_id.replace("-", "")[:6]
+    safe_stem = _sanitize_title_for_filename(Path(file.filename).stem)
+    saved_filename = f"upload_{safe_stem}_{short_id}{suffix}"
+    saved_path = TEMP_DIR / saved_filename
+
+    try:
+        async with aiofiles.open(saved_path, "wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                await out.write(chunk)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
+
+    tasks[task_id] = {
+        "status":      "processing",
+        "progress":    0,
+        "message":     "Starting file processing…",
+        "script":      None,
+        "summary":     None,
+        "error":       None,
+        "source_type": "file",
+        "source_name": file.filename,
+    }
+    save_tasks(tasks)
+
+    task = asyncio.create_task(
+        process_local_file_task(task_id, str(saved_path), file.filename,
+                                summary_language, translation_language, api_key, model_base_url, model_id)
+    )
+    active_tasks[task_id] = task
+    return {"task_id": task_id, "message": "Task created, processing…"}
+
+
+async def process_local_file_task(
+    task_id: str,
+    file_path: str,
+    original_filename: str,
+    summary_language: str,
+    translation_language: str = "",
+    api_key: str = "",
+    model_base_url: str = "",
+    model_id: str = "",
+):
+    """Async task: transcribe + summarize a locally uploaded file."""
+    try:
+        video_title = Path(original_filename).stem
+        short_id    = task_id.replace("-", "")[:6]
+        safe_title  = _sanitize_title_for_filename(video_title)
+        source_ref  = original_filename
+
+        if api_key:
+            effective_url = model_base_url.rstrip("/") or None
+            request_summarizer = Summarizer(
+                api_key=api_key, base_url=effective_url, model=model_id or None
+            )
+        else:
+            request_summarizer = summarizer
+
+        # ── Stage 1: Transcribe ──────────────────────────────────────────
+        tasks[task_id].update({"progress": 20, "message": "Transcribing audio (Whisper)…"})
+        save_tasks(tasks)
+        await broadcast_task_update(task_id, tasks[task_id])
+
+        raw_script = await transcriber.transcribe(file_path)
+
+        try:
+            raw_md_path = TEMP_DIR / f"raw_{safe_title}_{short_id}.md"
+            with open(raw_md_path, "w", encoding="utf-8") as f:
+                f.write((raw_script or "") + f"\n\nsource: {source_ref}\n")
+        except Exception as e:
+            logger.error(f"Failed to save raw transcript: {e}")
+
+        # ── Stage 2: Optimize ────────────────────────────────────────────
+        tasks[task_id].update({"progress": 55, "message": "Optimizing transcript…"})
+        save_tasks(tasks)
+        await broadcast_task_update(task_id, tasks[task_id])
+
+        script = await request_summarizer.optimize_transcript(raw_script)
+        script_with_title = f"# {video_title}\n\n{script}\n\nsource: {source_ref}\n"
+
+        # ── Stage 3: Translate if needed ─────────────────────────────────
+        detected_language    = transcriber.get_detected_language(raw_script)
+        translation_content  = None
+        raw_translation_content = None
+        translation_filename = None
+        translation_path     = None
+
+        # Build a request-scoped translator that uses the caller's API key if provided
+        if api_key:
+            effective_url_t = model_base_url.rstrip("/") or None
+            request_translator = Translator()
+            request_translator.client = openai.OpenAI(api_key=api_key, base_url=effective_url_t)
+            if model_id:
+                request_translator.model = model_id
+        else:
+            request_translator = translator
+
+        if translation_language and detected_language and translator.should_translate(detected_language, translation_language):
+            tasks[task_id].update({"progress": 70, "message": "Translating…"})
+            save_tasks(tasks)
+            await broadcast_task_update(task_id, tasks[task_id])
+
+            translation_content = await request_translator.translate_text(script, translation_language, detected_language)
+            translation_with_title = f"# {video_title}\n\n{translation_content}\n\nsource: {source_ref}\n"
+            translation_filename = f"translation_{safe_title}_{short_id}.md"
+            translation_path     = TEMP_DIR / translation_filename
+            async with aiofiles.open(translation_path, "w", encoding="utf-8") as f:
+                await f.write(translation_with_title)
+
+            # Also translate raw_script with timestamps preserved (local files always use Whisper)
+            raw_translation_content = await request_translator.translate_text(
+                raw_script, translation_language, detected_language, keep_markers=True
+            )
+
+        # ── Stage 4: Summarize ───────────────────────────────────────────
+        tasks[task_id].update({"progress": 80, "message": "Generating summary…"})
+        save_tasks(tasks)
+        await broadcast_task_update(task_id, tasks[task_id])
+
+        summary = await request_summarizer.summarize(script, summary_language, video_title)
+        summary_with_source = summary + f"\n\nsource: {source_ref}\n"
+
+        # ── Save output files ────────────────────────────────────────────
+        script_filename = f"transcript_{safe_title}_{short_id}.md"
+        script_path     = TEMP_DIR / script_filename
+        async with aiofiles.open(script_path, "w", encoding="utf-8") as f:
+            await f.write(script_with_title)
+
+        summary_filename = f"summary_{safe_title}_{short_id}.md"
+        summary_path     = TEMP_DIR / summary_filename
+        async with aiofiles.open(summary_path, "w", encoding="utf-8") as f:
+            await f.write(summary_with_source)
+
+        task_result = {
+            "status":            "completed",
+            "progress":          100,
+            "message":           "Done!",
+            "video_title":       video_title,
+            "script":            script_with_title,
+            "summary":           summary_with_source,
+            "script_path":       str(script_path),
+            "summary_path":      str(summary_path),
+            "short_id":          short_id,
+            "safe_title":        safe_title,
+            "detected_language": detected_language,
+            "summary_language":  summary_language,
+            # raw_script always has Whisper timestamps (local file always uses Whisper)
+            "raw_script": f"# {video_title}\n\n{raw_script}\n\nsource: {source_ref}\n",
+        }
+        if translation_content and translation_path:
+            task_result.update({
+                "translation":          translation_with_title,
+                "translation_path":     str(translation_path),
+                "translation_filename": translation_filename,
+                "raw_translation": f"# {video_title}\n\n{raw_translation_content}\n\nsource: {source_ref}\n" if raw_translation_content else None,
+            })
+
+        tasks[task_id].update(task_result)
+        save_tasks(tasks)
+        await broadcast_task_update(task_id, tasks[task_id])
+
+        if task_id in active_tasks:
+            del active_tasks[task_id]
+
+    except Exception as e:
+        logger.error(f"Task {task_id} failed: {e}")
+        if task_id in active_tasks:
+            del active_tasks[task_id]
+        tasks[task_id].update({
+            "status":  "error",
+            "error":   str(e),
+            "message": f"Processing failed: {e}",
+        })
+        save_tasks(tasks)
+        await broadcast_task_update(task_id, tasks[task_id])
+
+
 @app.post("/api/process-video")
 async def process_video(
     url: str = Form(...),
-    summary_language: str = Form(default="zh"),
+    summary_language:     str = Form(default="zh"),
+    translation_language: str = Form(default=""),
     api_key:       str = Form(default=""),
     model_base_url: str = Form(default=""),
     model_id:      str = Form(default=""),
@@ -183,7 +383,7 @@ async def process_video(
         save_tasks(tasks)
         
         # 创建并跟踪异步任务
-        task = asyncio.create_task(process_video_task(task_id, url, summary_language, api_key, model_base_url, model_id))
+        task = asyncio.create_task(process_video_task(task_id, url, summary_language, translation_language, api_key, model_base_url, model_id))
         active_tasks[task_id] = task
         
         return {"task_id": task_id, "message": "任务已创建，正在处理中..."}
@@ -196,6 +396,7 @@ async def process_video_task(
     task_id: str,
     url: str,
     summary_language: str,
+    translation_language: str = "",
     api_key: str = "",
     model_base_url: str = "",
     model_id: str = "",
@@ -306,30 +507,41 @@ async def process_video_task(
         logger.info(f"检测到的语言: {detected_language}, 摘要语言: {summary_language}")
         
         translation_content = None
+        raw_translation_content = None
         translation_filename = None
         translation_path = None
-        
-        if detected_language and translator.should_translate(detected_language, summary_language):
-            logger.info(f"需要翻译: {detected_language} -> {summary_language}")
-            # 更新状态：生成翻译
-            tasks[task_id].update({
-                "progress": 70,
-                "message": "正在生成翻译..."
-            })
+
+        # Build a request-scoped translator that uses the caller's API key if provided
+        if api_key:
+            effective_url_t = model_base_url.rstrip("/") or None
+            request_translator = Translator()
+            request_translator.client = openai.OpenAI(api_key=api_key, base_url=effective_url_t)
+            if model_id:
+                request_translator.model = model_id
+        else:
+            request_translator = translator
+
+        if translation_language and detected_language and translator.should_translate(detected_language, translation_language):
+            logger.info(f"需要翻译: {detected_language} -> {translation_language}")
+            tasks[task_id].update({"progress": 70, "message": "正在生成翻译..."})
             save_tasks(tasks)
             await broadcast_task_update(task_id, tasks[task_id])
-            
-            # 翻译转录文本
-            translation_content = await translator.translate_text(script, summary_language, detected_language)
+
+            translation_content = await request_translator.translate_text(script, translation_language, detected_language)
             translation_with_title = f"# {video_title}\n\n{translation_content}\n\nsource: {url}\n"
-            
-            # 保存翻译到文件
+
             translation_filename = f"translation_{safe_title}_{short_id}.md"
             translation_path = TEMP_DIR / translation_filename
             async with aiofiles.open(translation_path, "w", encoding="utf-8") as f:
                 await f.write(translation_with_title)
+
+            # Also translate raw_script with timestamps preserved (Whisper path only)
+            if not subtitle_text:
+                raw_translation_content = await request_translator.translate_text(
+                    raw_script, translation_language, detected_language, keep_markers=True
+                )
         else:
-            logger.info(f"不需要翻译: detected_language={detected_language}, summary_language={summary_language}, should_translate={translator.should_translate(detected_language, summary_language) if detected_language else 'N/A'}")
+            logger.info(f"不需要翻译: translation_language={translation_language!r}, detected_language={detected_language}")
         
         # 更新状态：生成摘要
         tasks[task_id].update({
@@ -379,7 +591,9 @@ async def process_video_task(
             "short_id": short_id,
             "safe_title": safe_title,
             "detected_language": detected_language,
-            "summary_language": summary_language
+            "summary_language": summary_language,
+            # raw_script with Whisper timestamps (only for Whisper path, not subtitle path)
+            "raw_script": f"# {video_title}\n\n{raw_script}\n\nsource: {url}\n" if not subtitle_text else None,
         }
         
         # 如果有翻译，添加翻译信息
@@ -387,7 +601,8 @@ async def process_video_task(
             task_result.update({
                 "translation": translation_with_title,
                 "translation_path": str(translation_path),
-                "translation_filename": translation_filename
+                "translation_filename": translation_filename,
+                "raw_translation": f"# {video_title}\n\n{raw_translation_content}\n\nsource: {url}\n" if raw_translation_content else None,
             })
         
         tasks[task_id].update(task_result)
@@ -493,6 +708,83 @@ async def task_stream(task_id: str):
             "Access-Control-Allow-Headers": "Cache-Control"
         }
     )
+
+@app.post("/api/translate")
+async def translate_on_demand(
+    content:        str = Form(...),
+    raw_content:    str = Form(default=""),
+    target_language: str = Form(...),
+    api_key:        str = Form(default=""),
+    model_base_url: str = Form(default=""),
+    model_id:       str = Form(default=""),
+):
+    """On-demand translation of transcript content (with optional timestamp-preserving raw version)."""
+    try:
+        # Build a translator instance; override client if custom API key provided
+        req_translator = Translator()
+        if api_key:
+            effective_url = model_base_url.rstrip("/") or os.getenv("OPENAI_BASE_URL") or None
+            req_translator.client = openai.OpenAI(api_key=api_key, base_url=effective_url)
+        if model_id:
+            req_translator.model = model_id
+        elif not req_translator.client:
+            raise HTTPException(status_code=400, detail="API key required for translation")
+
+        # Translate optimised script (no timestamps)
+        translation = await req_translator.translate_text(content, target_language)
+
+        # Translate raw script (preserve **[MM:SS - MM:SS]** markers)
+        raw_translation = None
+        if raw_content.strip():
+            raw_translation = await req_translator.translate_text(
+                raw_content, target_language, keep_markers=True
+            )
+
+        return {"translation": translation, "raw_translation": raw_translation}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"/api/translate error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/save-file")
+async def save_file_to_disk(
+    content:   str = Form(...),
+    base_path: str = Form(...),
+    subfolder: str = Form(...),
+    filename:  str = Form(...),
+):
+    """Save transcript content to {base_path}/{subfolder}/{filename} on the server filesystem."""
+    try:
+        # Validate filename: transcript.srt / transcript.txt / translation.srt / translation.txt
+        if not re.match(r'^(transcript|translation)\.(srt|txt)$', filename):
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        # Validate subfolder: no path traversal
+        if '..' in subfolder or '/' in subfolder or '\\' in subfolder:
+            raise HTTPException(status_code=400, detail="Invalid subfolder name")
+        if not re.match(r'^[\w\-\.]+$', subfolder):
+            raise HTTPException(status_code=400, detail="Subfolder contains invalid characters")
+
+        target_dir = Path(base_path) / subfolder
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_file = target_dir / filename
+
+        async with aiofiles.open(target_file, 'w', encoding='utf-8') as f:
+            await f.write(content)
+
+        return {"success": True, "saved_path": str(target_file)}
+    except HTTPException:
+        raise
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: cannot write to '{base_path}'")
+    except FileNotFoundError:
+        raise HTTPException(status_code=400, detail=f"Base path not found: '{base_path}'")
+    except Exception as e:
+        logger.error(f"save-file error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/download/{filename}")
 async def download_file(filename: str):

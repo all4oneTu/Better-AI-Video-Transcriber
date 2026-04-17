@@ -113,6 +113,88 @@
     }
     .error-banner.show { display: flex; }
 
+    /* ── Input mode tabs ────────────────────────────────── */
+    .input-mode-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+    .mode-tab {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 6px 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: color .2s, border-color .2s, background .2s;
+    }
+    .mode-tab:hover { color: var(--accent-text); border-color: var(--accent-dim); }
+    .mode-tab.active {
+      color: var(--accent-text);
+      border-color: var(--accent);
+      background: rgba(192,120,48,.08);
+    }
+
+    /* ── File drop zone ──────────────────────────────────── */
+    .file-drop-zone {
+      flex: 1;
+      border: 1.5px dashed var(--border-light);
+      border-radius: 10px;
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 18px 20px;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      text-align: center;
+      min-height: 74px;
+      gap: 4px;
+    }
+    .file-drop-zone:hover,
+    .file-drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(192,120,48,.05);
+    }
+    .file-drop-zone.selected {
+      border-color: var(--success);
+      background: rgba(106,184,122,.05);
+    }
+    .file-drop-icon {
+      font-size: 20px;
+      color: var(--text-dim);
+      margin-bottom: 2px;
+      transition: color .2s;
+    }
+    .file-drop-zone:hover .file-drop-icon,
+    .file-drop-zone.dragover .file-drop-icon { color: var(--accent-text); }
+    .file-drop-zone.selected .file-drop-icon { color: var(--success); }
+    .file-drop-text {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+    .file-drop-hint {
+      font-size: 11.5px;
+      color: var(--text-dim);
+      margin: 0;
+    }
+    .file-selected-name {
+      font-size: 13px;
+      color: var(--success);
+      margin: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     /* ── URL row ─────────────────────────────────────────── */
     .input-row {
       display: flex;
@@ -445,6 +527,33 @@
     .tab-pane { display: none; padding: 20px 20px 24px; }
     .tab-pane.active { display: block; }
 
+    /* ── Transcript toolbar (timestamp toggle) ───────────── */
+    .transcript-toolbar {
+      padding: 12px 20px 0;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .btn-ts-toggle {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 11px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: color .2s, border-color .2s, background .2s;
+    }
+    .btn-ts-toggle:hover { color: var(--accent-text); border-color: var(--accent-dim); }
+    .btn-ts-toggle.active {
+      color: var(--accent-text);
+      border-color: var(--accent);
+      background: rgba(192,120,48,.08);
+    }
+
     .md-content {
       font-size: 14px;
       line-height: 1.8;
@@ -485,6 +594,206 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* ── Translation controls ────────────────────────────── */
+    .translate-controls {
+      display: flex;
+      gap: 8px;
+      padding: 14px 20px 0;
+      align-items: center;
+    }
+    .translate-lang-select {
+      flex: 1;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text);
+      font-size: 13px;
+      padding: 7px 28px 7px 10px;
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237d6e62' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 9px center;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .translate-lang-select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(192,120,48,.1);
+    }
+    .translate-lang-select option { background: var(--surface-2); }
+    .btn-translate {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--r-sm);
+      padding: 7px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background .2s, opacity .2s;
+    }
+    .btn-translate:hover { background: var(--accent-h); }
+    .btn-translate:disabled { opacity: .5; cursor: not-allowed; }
+    .translate-empty {
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 13px;
+      padding: 28px 20px;
+    }
+
+    /* ── Success banner ─────────────────────────────────── */
+    .success-banner {
+      display: none;
+      background: rgba(106,184,122,.1);
+      border: 1px solid rgba(106,184,122,.3);
+      border-radius: var(--r-sm);
+      padding: 11px 14px;
+      font-size: 13px;
+      color: var(--success);
+      margin-bottom: 16px;
+      gap: 8px;
+      align-items: flex-start;
+      word-break: break-all;
+    }
+    .success-banner.show { display: flex; }
+
+    /* ── Save path row ───────────────────────────────────── */
+    .save-path-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .save-path-icon { color: var(--text-dim); font-size: 13px; flex-shrink: 0; }
+    .save-path-input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      color: var(--text);
+      font-size: 12.5px;
+      font-family: 'Courier New', Consolas, monospace;
+      padding: 7px 12px;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .save-path-input::placeholder { color: var(--text-dim); }
+    .save-path-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(192,120,48,.1);
+    }
+
+    /* ── Batch panel ─────────────────────────────────────── */
+    .batch-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+      width: 100%;
+    }
+    .batch-textarea {
+      width: 100%;
+      min-height: 108px;
+      resize: vertical;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      padding: 12px 14px;
+      outline: none;
+      line-height: 1.7;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .batch-textarea::placeholder { color: var(--text-dim); }
+    .batch-textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(192,120,48,.12);
+    }
+    .batch-submit-row { display: flex; justify-content: flex-end; }
+
+    /* ── Batch results panel ─────────────────────────────── */
+    .batch-results-panel {
+      background: var(--surface);
+      border: 1.5px solid var(--border-light);
+      border-radius: var(--r);
+      margin-top: 16px;
+      overflow: hidden;
+    }
+    .batch-results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      gap: 12px;
+    }
+    .batch-header-text { color: var(--text-muted); font-weight: 500; flex: 1; }
+    .batch-stop-btn {
+      background: none;
+      border: 1px solid var(--error);
+      color: var(--error);
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-size: 11.5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: background .2s;
+      flex-shrink: 0;
+    }
+    .batch-stop-btn:hover  { background: rgba(224,120,120,.12); }
+    .batch-stop-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .batch-list { max-height: 420px; overflow-y: auto; }
+    .batch-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      transition: background .15s;
+    }
+    .batch-item:last-child { border-bottom: none; }
+    .batch-item.processing { background: rgba(192,120,48,.04); }
+    .batch-item-icon {
+      flex-shrink: 0;
+      width: 18px;
+      text-align: center;
+      font-size: 12px;
+      margin-top: 2px;
+      color: var(--text-dim);
+    }
+    .batch-item.done       .batch-item-icon { color: var(--success); }
+    .batch-item.error      .batch-item-icon { color: var(--error); }
+    .batch-item.processing .batch-item-icon { color: var(--accent-text); }
+    .batch-item-body { flex: 1; min-width: 0; }
+    .batch-item-url {
+      font-size: 12px;
+      color: var(--text-muted);
+      word-break: break-all;
+      line-height: 1.5;
+    }
+    .batch-item.processing .batch-item-url { color: var(--text); }
+    .batch-item.done       .batch-item-url { color: var(--text); }
+    .batch-item.error      .batch-item-url { color: var(--error); opacity: .85; }
+    .batch-item-msg {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 3px;
+    }
+    .batch-item.done  .batch-item-msg { color: var(--success); opacity: .8; }
+    .batch-item.error .batch-item-msg { color: var(--error);   opacity: .8; }
+
     /* ── Responsive ──────────────────────────────────────── */
     @media (max-width: 560px) {
       .navbar { padding: 12px 16px; }
@@ -517,15 +826,38 @@
   <h1 class="page-title" data-i18n="title">AI Video Transcriber</h1>
   <p class="page-sub" data-i18n="subtitle">Supports automatic transcription and AI summary for 30+ platforms</p>
 
+  <!-- Success -->
+  <div id="successBanner" class="success-banner">
+    <i class="fas fa-check-circle" style="margin-top:1px;flex-shrink:0;"></i>
+    <span id="successMsg"></span>
+  </div>
+
   <!-- Error -->
   <div id="errorBanner" class="error-banner">
     <i class="fas fa-exclamation-circle" style="margin-top:1px;flex-shrink:0;"></i>
     <span id="errorMsg"></span>
   </div>
 
-  <!-- URL form -->
+  <!-- Input mode tabs -->
+  <div class="input-mode-tabs">
+    <button type="button" class="mode-tab active" id="tabUrl">
+      <i class="fas fa-link"></i>
+      <span data-i18n="mode_url">URL</span>
+    </button>
+    <button type="button" class="mode-tab" id="tabFile">
+      <i class="fas fa-folder-open"></i>
+      <span data-i18n="mode_file">Local File</span>
+    </button>
+    <button type="button" class="mode-tab" id="tabBatch">
+      <i class="fas fa-layer-group"></i>
+      <span data-i18n="mode_batch">Batch</span>
+    </button>
+  </div>
+
+  <!-- URL / File form -->
   <form id="videoForm" autocomplete="off">
-    <div class="input-row">
+    <!-- URL panel -->
+    <div id="urlPanel" class="input-row">
       <div class="url-wrap">
         <i class="fas fa-link url-icon"></i>
         <input
@@ -534,7 +866,6 @@
           class="url-input"
           placeholder="Paste YouTube, Tiktok, Bilibili or other platform video URLs..."
           data-i18n-placeholder="video_url_placeholder"
-          required
         >
       </div>
       <button type="submit" id="submitBtn" class="btn-go">
@@ -542,9 +873,43 @@
         <span data-i18n="start_transcription">Transcribe</span>
       </button>
     </div>
+
+    <!-- File panel -->
+    <div id="filePanel" class="input-row" style="display:none">
+      <div class="file-drop-zone" id="fileDropZone">
+        <input type="file" id="fileInput"
+          accept=".mp3,.mp4,.wav,.m4a,.ogg,.flac,.webm,.mkv,.avi,.mov,.aac,.wma,.opus,.3gp">
+        <i class="fas fa-cloud-upload-alt file-drop-icon"></i>
+        <p class="file-drop-text" data-i18n="file_drop_text">Drag &amp; drop or click to browse</p>
+        <p class="file-drop-hint" data-i18n="file_drop_hint">MP3, MP4, WAV, M4A, MOV and more</p>
+      </div>
+      <button type="submit" id="submitFileBtn" class="btn-go">
+        <i class="fas fa-search"></i>
+        <span data-i18n="start_transcription">Transcribe</span>
+      </button>
+    </div>
+
+    <!-- Batch panel -->
+    <div id="batchPanel" class="batch-wrap" style="display:none">
+      <textarea
+        id="batchUrls"
+        class="batch-textarea"
+        placeholder="Paste video URLs, one per line…"
+        data-i18n-placeholder="batch_placeholder"
+        autocomplete="off"
+        spellcheck="false"
+        rows="4"
+      ></textarea>
+      <div class="batch-submit-row">
+        <button type="submit" id="submitBatchBtn" class="btn-go">
+          <i class="fas fa-layer-group"></i>
+          <span data-i18n="batch_start">Batch Transcribe</span>
+        </button>
+      </div>
+    </div>
   </form>
 
-  <!-- Settings row: Summary Language + AI Settings toggle -->
+  <!-- Settings row: Summary Language + Translate To + AI Settings toggle -->
   <div class="settings-row">
     <div class="inline-lang">
       <label class="inline-lang-label" for="summaryLanguage" data-i18n="summary_language">Summary Language</label>
@@ -560,6 +925,29 @@
         <option value="ja">日本語</option>
         <option value="ko">한국어</option>
         <option value="ar">العربية</option>
+      </select>
+    </div>
+
+    <div class="inline-lang">
+      <label class="inline-lang-label" for="translationLanguage" data-i18n="translate_to">Translate To</label>
+      <select id="translationLanguage" class="inline-lang-select">
+        <option value="" data-i18n="translate_to_none">— None —</option>
+        <option value="en">English</option>
+        <option value="zh">中文（简体）</option>
+        <option value="zh-tw">中文（繁體）</option>
+        <option value="vi">Tiếng Việt</option>
+        <option value="ja">日本語</option>
+        <option value="ko">한국어</option>
+        <option value="es">Español</option>
+        <option value="fr">Français</option>
+        <option value="de">Deutsch</option>
+        <option value="it">Italiano</option>
+        <option value="pt">Português</option>
+        <option value="ru">Русский</option>
+        <option value="ar">العربية</option>
+        <option value="hi">हिन्दी</option>
+        <option value="th">ภาษาไทย</option>
+        <option value="tr">Türkçe</option>
       </select>
     </div>
 
@@ -619,6 +1007,32 @@
     </div>
   </div>
 
+  <!-- Save path -->
+  <div class="save-path-row">
+    <i class="fas fa-folder-open save-path-icon"></i>
+    <input
+      id="savePath"
+      class="save-path-input"
+      type="text"
+      placeholder="Save folder path (optional) — e.g. C:\Users\Admin\Transcripts"
+      data-i18n-placeholder="save_path_placeholder"
+      autocomplete="off"
+      spellcheck="false"
+    >
+  </div>
+
+  <!-- Batch results panel -->
+  <div id="batchResultsPanel" class="batch-results-panel" style="display:none">
+    <div class="batch-results-header">
+      <span class="batch-header-text" id="batchHeaderText"></span>
+      <button type="button" class="batch-stop-btn" id="batchStopBtn">
+        <i class="fas fa-stop"></i>
+        <span data-i18n="batch_stop">Stop</span>
+      </button>
+    </div>
+    <div class="batch-list" id="batchList"></div>
+  </div>
+
   <!-- Result panel -->
   <div class="result-panel" id="resultPanel">
 
@@ -652,7 +1066,7 @@
         </button>
         <button class="btn-dl" id="downloadTranslation" style="display:none;">
           <i class="fas fa-download"></i>
-          <span data-i18n="download_translation">Translation</span>
+          <span>TXT</span>
         </button>
         <button class="btn-dl" id="downloadSummary">
           <i class="fas fa-download"></i>
@@ -667,19 +1081,59 @@
         <button class="tab-btn" data-tab="summary">
           <span data-i18n="intelligent_summary">AI Summary</span>
         </button>
-        <button class="tab-btn" data-tab="translation" id="translationTabBtn" style="display:none;">
+        <button class="tab-btn" data-tab="translation" id="translationTabBtn">
           <span data-i18n="translation">Translation</span>
         </button>
       </div>
 
       <div id="scriptTab" class="tab-pane active">
+        <div class="transcript-toolbar">
+          <button class="btn-ts-toggle active" id="timestampToggle">
+            <i class="fas fa-clock"></i>
+            <span data-i18n="timestamp_toggle">Timestamps</span>
+          </button>
+        </div>
         <div class="md-content" id="scriptContent"></div>
       </div>
       <div id="summaryTab" class="tab-pane">
         <div class="md-content" id="summaryContent"></div>
       </div>
       <div id="translationTab" class="tab-pane">
-        <div class="md-content" id="translationContent"></div>
+        <!-- Language selector + Translate button -->
+        <div class="translate-controls">
+          <select id="translateLangSelect" class="translate-lang-select">
+            <option value="en">English</option>
+            <option value="zh">中文（简体）</option>
+            <option value="zh-tw">中文（繁體）</option>
+            <option value="vi">Tiếng Việt</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="es">Español</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="it">Italiano</option>
+            <option value="pt">Português</option>
+            <option value="ru">Русский</option>
+            <option value="ar">العربية</option>
+            <option value="hi">हिन्दी</option>
+            <option value="th">ภาษาไทย</option>
+            <option value="tr">Türkçe</option>
+          </select>
+          <button class="btn-translate" id="translateBtn">
+            <i class="fas fa-language"></i>
+            <span data-i18n="btn_translate">Translate</span>
+          </button>
+        </div>
+        <!-- Timestamp toggle (shown only when raw translation available) -->
+        <div class="transcript-toolbar" id="translateToolbar" style="display:none;">
+          <button class="btn-ts-toggle active" id="translateTimestampToggle">
+            <i class="fas fa-clock"></i>
+            <span data-i18n="timestamp_toggle">Timestamps</span>
+          </button>
+        </div>
+        <!-- Content -->
+        <div class="translate-empty" id="translateEmpty" data-i18n="translate_empty">Select a language and click Translate</div>
+        <div class="md-content" id="translationContent" style="display:none;"></div>
       </div>
     </div>
 
@@ -690,6 +1144,6 @@
   </div>
 </main>
 
-<script src="/static/app.js?v=20260307"></script>
+<script src="/static/app.js?v=20260419"></script>
 </body>
 </html>

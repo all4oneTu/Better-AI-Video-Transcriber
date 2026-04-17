@@ -8,6 +8,15 @@ class VideoTranscriber {
     this.eventSource    = null;
     this.apiBase        = '/api';
     this.currentLang    = 'en';
+    this.inputMode      = 'url';   // 'url' | 'file'
+    this.selectedFile   = null;
+    this.showTimestamps = true;
+    this.currentSource          = '';
+    this.currentTranslation     = null;
+    this.rawTranslation         = null;
+    this.showTranslationTimestamps = true;
+    this.batchRunning           = false;
+    this.batchStopped           = false;
 
     /* Smart progress simulation */
     this.sp = {
@@ -59,6 +68,37 @@ class VideoTranscriber {
         fetching_models:         'Fetching models…',
         models_loaded:           (n) => `${n} models loaded`,
         models_error:            'Failed to fetch models',
+        timestamp_toggle:        'Timestamps',
+        download_srt:            'SRT',
+        download_txt:            'TXT',
+        save_path_placeholder:   'Save folder path (optional) — e.g. C:\\Users\\Admin\\Transcripts',
+        file_saved_to:           'Saved to: ',
+        error_save_failed:       'Save failed: ',
+        btn_translate:           'Translate',
+        translating:             'Translating…',
+        translate_empty:         'Select a language and click Translate',
+        error_translate_failed:  'Translation failed: ',
+        mode_url:                'URL',
+        mode_file:               'Local File',
+        file_drop_text:          'Drag & drop or click to browse',
+        file_drop_hint:          'MP3, MP4, WAV, M4A, MOV and more',
+        error_no_file:           'Please select a file to upload',
+        error_invalid_file:      'Unsupported file type',
+        uploading_file:          'Uploading file…',
+        translate_to:            'Translate To',
+        translate_to_none:       '— None —',
+        auto_translating:        'Auto-translating…',
+        mode_batch:              'Batch',
+        batch_placeholder:       'Paste video URLs, one per line…',
+        batch_start:             'Batch Transcribe',
+        batch_stop:              'Stop',
+        batch_require_save_path: 'Please set a save folder path for batch mode',
+        batch_error_empty:       'Please enter at least one valid URL',
+        batch_status_pending:    'Pending',
+        batch_status_cancelled:  'Cancelled',
+        batch_progress:          (done, total) => `Processing ${done} / ${total}`,
+        batch_completed_ok:      (ok, total) => `Done — ${ok}/${total} saved`,
+        batch_completed_errors:  (ok, fail, total) => `Done — ${ok} saved, ${fail} failed (${total} total)`,
       },
       zh: {
         title:                   'AI 视频转录器',
@@ -103,6 +143,37 @@ class VideoTranscriber {
         fetching_models:         '正在获取模型列表…',
         models_loaded:           (n) => `已加载 ${n} 个模型`,
         models_error:            '获取模型失败',
+        timestamp_toggle:        '时间戳',
+        download_srt:            'SRT',
+        download_txt:            'TXT',
+        save_path_placeholder:   '保存文件夹路径（可选）— 例如 C:\\Users\\Admin\\Transcripts',
+        file_saved_to:           '已保存至：',
+        error_save_failed:       '保存失败：',
+        btn_translate:           '翻译',
+        translating:             '翻译中…',
+        translate_empty:         '选择语言后点击翻译',
+        error_translate_failed:  '翻译失败：',
+        mode_url:                'URL',
+        mode_file:               '本地文件',
+        file_drop_text:          '拖放或点击选择文件',
+        file_drop_hint:          'MP3、MP4、WAV、M4A、MOV 等格式',
+        error_no_file:           '请选择要上传的文件',
+        error_invalid_file:      '不支持的文件格式',
+        uploading_file:          '正在上传文件…',
+        translate_to:            '翻译为',
+        translate_to_none:       '— 不翻译 —',
+        auto_translating:        '正在自动翻译…',
+        mode_batch:              '批量',
+        batch_placeholder:       '粘贴视频链接，每行一个…',
+        batch_start:             '批量转录',
+        batch_stop:              '停止',
+        batch_require_save_path: '请先设置保存文件夹路径（批量模式必须）',
+        batch_error_empty:       '请至少输入一个有效链接',
+        batch_status_pending:    '待处理',
+        batch_status_cancelled:  '已取消',
+        batch_progress:          (done, total) => `处理中 ${done} / ${total}`,
+        batch_completed_ok:      (ok, total) => `完成 — ${ok}/${total} 已保存`,
+        batch_completed_errors:  (ok, fail, total) => `完成 — ${ok} 成功，${fail} 失败（共 ${total}）`,
       }
     };
 
@@ -117,7 +188,8 @@ class VideoTranscriber {
     this.form               = document.getElementById('videoForm');
     this.videoUrlInput      = document.getElementById('videoUrl');
     this.submitBtn          = document.getElementById('submitBtn');
-    this.summaryLangSel     = document.getElementById('summaryLanguage');
+    this.summaryLangSel        = document.getElementById('summaryLanguage');
+    this.translationLangSel    = document.getElementById('translationLanguage');
     this.langToggle         = document.getElementById('langToggle');
     this.langText           = document.getElementById('langText');
     this.errorBanner        = document.getElementById('errorBanner');
@@ -147,14 +219,82 @@ class VideoTranscriber {
     this.fetchStatus        = document.getElementById('fetchStatus');
     this.modelSelect        = document.getElementById('modelSelect');
     this.fetchIcon          = document.getElementById('fetchIcon');
+    this.timestampToggleBtn        = document.getElementById('timestampToggle');
+    this.successBanner             = document.getElementById('successBanner');
+    this.successMsg                = document.getElementById('successMsg');
+    this.savePathInput             = document.getElementById('savePath');
+    // translation tab
+    this.translateLangSelect       = document.getElementById('translateLangSelect');
+    this.translateBtn              = document.getElementById('translateBtn');
+    this.translateToolbar          = document.getElementById('translateToolbar');
+    this.translateTimestampToggle  = document.getElementById('translateTimestampToggle');
+    this.translateEmpty            = document.getElementById('translateEmpty');
+    // input mode
+    this.tabUrl             = document.getElementById('tabUrl');
+    this.tabFile            = document.getElementById('tabFile');
+    this.tabBatch           = document.getElementById('tabBatch');
+    this.urlPanel           = document.getElementById('urlPanel');
+    this.filePanel          = document.getElementById('filePanel');
+    this.batchPanel         = document.getElementById('batchPanel');
+    this.fileDropZone       = document.getElementById('fileDropZone');
+    this.fileInput          = document.getElementById('fileInput');
+    this.submitFileBtn      = document.getElementById('submitFileBtn');
+    this.batchUrlsInput     = document.getElementById('batchUrls');
+    this.submitBatchBtn     = document.getElementById('submitBatchBtn');
+    // batch results
+    this.batchResultsPanel  = document.getElementById('batchResultsPanel');
+    this.batchHeaderText    = document.getElementById('batchHeaderText');
+    this.batchList          = document.getElementById('batchList');
+    this.batchStopBtn       = document.getElementById('batchStopBtn');
   }
 
   /* ── Events ───────────────────────────────────────────── */
   _bindEvents() {
-    this.form.addEventListener('submit', (e) => { e.preventDefault(); this._startTranscription(); });
+    this.form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (this.inputMode === 'file')  this._startFileTranscription();
+      else if (this.inputMode === 'batch') this._startBatchTranscription();
+      else this._startTranscription();
+    });
 
     this.langToggle.addEventListener('click', () => {
       this._switchLang(this.currentLang === 'en' ? 'zh' : 'en');
+    });
+
+    // Timestamp toggle (transcript)
+    this.timestampToggleBtn.addEventListener('click', () => this._toggleTimestamps());
+
+    // Translation tab
+    this.translateBtn.addEventListener('click', () => this._translateContent());
+    this.translateTimestampToggle.addEventListener('click', () => this._toggleTranslationTimestamps());
+
+    // Input mode tabs
+    this.tabUrl.addEventListener('click',   () => this._switchInputMode('url'));
+    this.tabFile.addEventListener('click',  () => this._switchInputMode('file'));
+    this.tabBatch.addEventListener('click', () => this._switchInputMode('batch'));
+
+    // Batch stop
+    this.batchStopBtn.addEventListener('click', () => {
+      this.batchStopped = true;
+      this.batchStopBtn.disabled = true;
+    });
+
+    // File drop zone: click to open file picker
+    this.fileDropZone.addEventListener('click', () => this.fileInput.click());
+
+    // File drag-and-drop
+    this.fileDropZone.addEventListener('dragover',  (e) => { e.preventDefault(); this.fileDropZone.classList.add('dragover'); });
+    this.fileDropZone.addEventListener('dragleave', ()  => this.fileDropZone.classList.remove('dragover'));
+    this.fileDropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      this.fileDropZone.classList.remove('dragover');
+      const f = e.dataTransfer.files[0];
+      if (f) this._setSelectedFile(f);
+    });
+
+    // File input change
+    this.fileInput.addEventListener('change', () => {
+      if (this.fileInput.files[0]) this._setSelectedFile(this.fileInput.files[0]);
     });
 
     // Settings toggle
@@ -174,9 +314,10 @@ class VideoTranscriber {
     this.apiKeyInput.addEventListener('input', debouncedFetch);
 
     // Persist settings
-    [this.modelBaseUrl, this.apiKeyInput, this.modelSelect, this.summaryLangSel].forEach(el => {
+    [this.modelBaseUrl, this.apiKeyInput, this.modelSelect, this.summaryLangSel, this.translationLangSel, this.savePathInput].forEach(el => {
       el.addEventListener('change', () => this._saveSettings());
     });
+    this.savePathInput.addEventListener('input', () => this._saveSettings());
 
     // Tabs
     this.tabBtns.forEach(btn => {
@@ -215,10 +356,12 @@ class VideoTranscriber {
   /* ── Settings persistence ─────────────────────────────── */
   _saveSettings() {
     const s = {
-      baseUrl:  this.modelBaseUrl.value,
-      apiKey:   this.apiKeyInput.value,
-      model:    this.modelSelect.value,
-      summaryLang: this.summaryLangSel.value,
+      baseUrl:         this.modelBaseUrl.value,
+      apiKey:          this.apiKeyInput.value,
+      model:           this.modelSelect.value,
+      summaryLang:     this.summaryLangSel.value,
+      translateLang:   this.translationLangSel.value,
+      savePath:        this.savePathInput.value,
     };
     try { localStorage.setItem('vt_settings', JSON.stringify(s)); } catch (_) {}
   }
@@ -228,9 +371,11 @@ class VideoTranscriber {
       const raw = localStorage.getItem('vt_settings');
       if (!raw) return;
       const s = JSON.parse(raw);
-      if (s.baseUrl)     this.modelBaseUrl.value = s.baseUrl;
-      if (s.apiKey)      this.apiKeyInput.value  = s.apiKey;
-      if (s.summaryLang) this.summaryLangSel.value = s.summaryLang;
+      if (s.baseUrl)       this.modelBaseUrl.value       = s.baseUrl;
+      if (s.apiKey)        this.apiKeyInput.value        = s.apiKey;
+      if (s.summaryLang)   this.summaryLangSel.value     = s.summaryLang;
+      if (s.translateLang !== undefined) this.translationLangSel.value = s.translateLang;
+      if (s.savePath)      this.savePathInput.value      = s.savePath;
       // Model options will be restored after fetching
       this._savedModel = s.model || '';
 
@@ -315,6 +460,7 @@ class VideoTranscriber {
 
     if (!url) { this._showError(this.t('error_invalid_url')); return; }
 
+    this.currentSource = url;
     this._setLoading(true);
     this._hideError();
     this._showProgress();
@@ -323,6 +469,8 @@ class VideoTranscriber {
       const fd = new FormData();
       fd.append('url',              url);
       fd.append('summary_language', sumLang);
+      const transLang = this.translationLangSel.value;
+      if (transLang) fd.append('translation_language', transLang);
 
       const apiKey  = this.apiKeyInput.value.trim();
       const baseUrl = this.modelBaseUrl.value.trim().replace(/\/$/, '');
@@ -335,6 +483,78 @@ class VideoTranscriber {
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         throw new Error(err.detail || 'Request failed');
+      }
+
+      const data = await resp.json();
+      this.currentTaskId = data.task_id;
+
+      this._initSP();
+      this._updateProgress(5, this.t('preparing'), true);
+      this._startSSE();
+      this._saveSettings();
+
+    } catch (err) {
+      this._showError(this.t('error_processing_failed') + err.message);
+      this._setLoading(false);
+      this._hideProgress();
+    }
+  }
+
+  /* ── Input mode ───────────────────────────────────────── */
+  _switchInputMode(mode) {
+    this.inputMode = mode;
+    this.tabUrl.classList.toggle('active',   mode === 'url');
+    this.tabFile.classList.toggle('active',  mode === 'file');
+    this.tabBatch.classList.toggle('active', mode === 'batch');
+    this.urlPanel.style.display   = mode === 'url'   ? '' : 'none';
+    this.filePanel.style.display  = mode === 'file'  ? '' : 'none';
+    this.batchPanel.style.display = mode === 'batch' ? '' : 'none';
+  }
+
+  _setSelectedFile(file) {
+    this.selectedFile = file;
+    const zone = this.fileDropZone;
+    zone.classList.add('selected');
+    // Replace inner content to show filename
+    zone.innerHTML = `
+      <i class="fas fa-check-circle file-drop-icon"></i>
+      <p class="file-selected-name">${file.name}</p>
+      <p class="file-drop-hint">${(file.size / 1024 / 1024).toFixed(1)} MB — click to change</p>`;
+    // Re-attach click handler since innerHTML was replaced
+    zone.addEventListener('click', () => this.fileInput.click());
+  }
+
+  /* ── File transcription ───────────────────────────────── */
+  async _startFileTranscription() {
+    if (this.submitFileBtn.disabled) return;
+
+    if (!this.selectedFile) { this._showError(this.t('error_no_file')); return; }
+
+    this.currentSource = this.selectedFile.name;
+    this._setLoading(true);
+    this._hideError();
+    this._showProgress();
+
+    try {
+      const fd = new FormData();
+      fd.append('file',             this.selectedFile);
+      fd.append('summary_language', this.summaryLangSel.value);
+      const transLang = this.translationLangSel.value;
+      if (transLang) fd.append('translation_language', transLang);
+
+      const apiKey  = this.apiKeyInput.value.trim();
+      const baseUrl = this.modelBaseUrl.value.trim().replace(/\/$/, '');
+      const modelId = this.modelSelect.value;
+      if (apiKey)  fd.append('api_key',       apiKey);
+      if (baseUrl) fd.append('model_base_url', baseUrl);
+      if (modelId) fd.append('model_id',       modelId);
+
+      this._updateProgress(3, this.t('uploading_file'), true);
+
+      const resp = await fetch(`${this.apiBase}/process-file`, { method: 'POST', body: fd });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || 'Upload failed');
       }
 
       const data = await resp.json();
@@ -366,7 +586,7 @@ class VideoTranscriber {
 
         if (task.status === 'completed') {
           this._stopSP(); this._stopSSE(); this._setLoading(false); this._hideProgress();
-          this._showResults(task.script, task.summary, task.video_title, task.translation, task.detected_language, task.summary_language);
+          this._showResults(task.script, task.summary, task.video_title, task.raw_script, task.translation || null, task.raw_translation || null);
         } else if (task.status === 'error') {
           this._stopSP(); this._stopSSE(); this._setLoading(false); this._hideProgress();
           this._showError(task.error || 'Processing error');
@@ -383,7 +603,7 @@ class VideoTranscriber {
             const task = await r.json();
             if (task?.status === 'completed') {
               this._stopSP(); this._setLoading(false); this._hideProgress();
-              this._showResults(task.script, task.summary, task.video_title, task.translation, task.detected_language, task.summary_language);
+              this._showResults(task.script, task.summary, task.video_title, task.raw_script, task.translation || null, task.raw_translation || null);
               return;
             }
           }
@@ -437,6 +657,7 @@ class VideoTranscriber {
     else if (m.includes('下载') || m.includes('download'))                 { this.sp.stage = 'downloading';   this.sp.target = 60; }
     else if (m.includes('转录') || m.includes('transcrib') || m.includes('whisper')) { this.sp.stage = 'transcribing';  this.sp.target = 80; }
     else if (m.includes('优化') || m.includes('optimiz'))                  { this.sp.stage = 'optimizing';    this.sp.target = 90; }
+    else if (m.includes('翻译') || m.includes('translat'))                 { this.sp.stage = 'translating';   this.sp.target = 85; }
     else if (m.includes('摘要') || m.includes('summary'))                  { this.sp.stage = 'summarizing';   this.sp.target = 95; }
     else if (m.includes('完成') || m.includes('complet'))                  { this.sp.stage = 'completed';     this.sp.target = 100; }
 
@@ -474,7 +695,7 @@ class VideoTranscriber {
   }
   _tickSP() {
     if (!this.sp.enabled || this.sp.current >= this.sp.target) return;
-    const speeds = { subtitle: .5, parsing: .3, downloading: .18, transcribing: .14, optimizing: .22, summarizing: .28 };
+    const speeds = { subtitle: .5, parsing: .3, downloading: .18, transcribing: .14, optimizing: .22, translating: .15, summarizing: .28 };
     let inc = speeds[this.sp.stage] || .2;
     const remaining = this.sp.target - this.sp.current;
     if (remaining < 5) inc *= .3;
@@ -492,6 +713,7 @@ class VideoTranscriber {
       parsing:        this.t('parsing_video'),
       transcribing:   this.t('transcribing_audio'),
       optimizing:     this.t('optimizing_transcript'),
+      translating:    this.t('auto_translating'),
       summarizing:    this.t('generating_summary'),
       completed:      this.t('completed'),
     };
@@ -515,6 +737,7 @@ class VideoTranscriber {
     else if (m.includes('解析') || m.includes('pars'))      label = this.t('parsing_video');
     else if (m.includes('转录') || m.includes('transcrib')) label = this.t('transcribing_audio');
     else if (m.includes('优化') || m.includes('optimiz'))   label = this.t('optimizing_transcript');
+    else if (m.includes('翻译') || m.includes('translat'))  label = this.t('auto_translating');
     else if (m.includes('摘要') || m.includes('summary'))   label = this.t('generating_summary');
     else if (m.includes('完成') || m.includes('complet'))   label = this.t('completed');
     else if (m.includes('准备') || m.includes('prepar'))    label = this.t('preparing');
@@ -533,18 +756,37 @@ class VideoTranscriber {
   _hideProgress() { this.progressPanel.classList.remove('show'); }
 
   /* ── Results ──────────────────────────────────────────── */
-  _showResults(script, summary, videoTitle, translation, detectedLang, summaryLang) {
-    this.scriptContent.innerHTML  = script    ? marked.parse(script)      : '';
-    this.summaryContent.innerHTML = summary   ? marked.parse(summary)     : '';
+  _showResults(script, summary, videoTitle, rawScript, translation = null, rawTranslation = null) {
+    // Store both versions: optimized (no timestamps) and raw (with timestamps)
+    this.currentScript     = script    || '';
+    this.rawScript         = rawScript || null;
+    this.currentVideoTitle = videoTitle || 'transcript';
+    // Reset toggle to "on" for each new result
+    this.showTimestamps = true;
 
-    const showTranslation = translation && detectedLang && summaryLang && detectedLang !== summaryLang;
-    if (showTranslation) {
-      this.translationContent.innerHTML = marked.parse(translation);
-      this.translationTabBtn.style.display  = 'inline-block';
-      this.dlTranslation.style.display      = 'inline-flex';
+    this.scriptContent.innerHTML  = marked.parse(this._scriptToRender());
+    this._updateTimestampBtn();
+    this.summaryContent.innerHTML = summary ? marked.parse(summary) : '';
+
+    // Populate translation tab — auto-translation if provided, otherwise reset
+    this.showTranslationTimestamps = true;
+    if (translation) {
+      this.currentTranslation = translation;
+      this.rawTranslation     = rawTranslation || null;
+      this.translateEmpty.style.display = 'none';
+      this.translationContent.style.display = '';
+      this.translationContent.innerHTML = marked.parse(this._translationToRender());
+      this._updateTranslationTimestampBtn();
     } else {
-      this.translationTabBtn.style.display  = 'none';
-      this.dlTranslation.style.display      = 'none';
+      this.currentTranslation = null;
+      this.rawTranslation     = null;
+      this.translationContent.innerHTML = '';
+      this.translationContent.style.display = 'none';
+      this.translateEmpty.style.display = '';
+      this.translateEmpty.textContent = this.t('translate_empty');
+      this.translateToolbar.style.display = 'none';
+      this.translateTimestampToggle.classList.add('active');
+      this.dlTranslation.style.display = 'none';
     }
 
     this.resultsPanel.classList.add('show');
@@ -552,7 +794,126 @@ class VideoTranscriber {
     this.resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  _scriptToRender() {
+    // When timestamps ON and raw version exists, show raw (has Whisper timestamps).
+    // When OFF or no raw version, show optimized script.
+    return (this.showTimestamps && this.rawScript) ? this.rawScript : this.currentScript;
+  }
+
+  _updateTimestampBtn() {
+    const hasTs = !!this.rawScript;
+    this.timestampToggleBtn.style.display = hasTs ? '' : 'none';
+    this.timestampToggleBtn.classList.toggle('active', this.showTimestamps);
+    this._updateScriptDownloadLabel();
+  }
+
+  _updateScriptDownloadLabel() {
+    const span = this.dlScript.querySelector('span');
+    if (!span) return;
+    const isSrt = this.showTimestamps && !!this.rawScript;
+    span.textContent = isSrt ? this.t('download_srt') : this.t('download_txt');
+  }
+
+  _toggleTimestamps() {
+    this.showTimestamps = !this.showTimestamps;
+    this.timestampToggleBtn.classList.toggle('active', this.showTimestamps);
+    this.scriptContent.innerHTML = marked.parse(this._scriptToRender());
+    this._updateScriptDownloadLabel();
+  }
+
   _hideResults() { this.resultsPanel.classList.remove('show'); }
+
+  /* ── On-demand Translation ────────────────────────────── */
+  async _translateContent() {
+    if (!this.currentScript) { this._showError(this.t('error_no_download')); return; }
+
+    // Show loading state
+    this.translateBtn.disabled = true;
+    this.translateBtn.innerHTML = `<span class="spinner"></span> ${this.t('translating')}`;
+    this.translateEmpty.style.display = '';
+    this.translateEmpty.textContent = this.t('translating');
+    this.translationContent.style.display = 'none';
+    this.dlTranslation.style.display = 'none';
+
+    try {
+      const fd = new FormData();
+      fd.append('content',         this.currentScript);
+      fd.append('target_language', this.translateLangSelect.value);
+      if (this.rawScript) fd.append('raw_content', this.rawScript);
+
+      const apiKey  = this.apiKeyInput.value.trim();
+      const baseUrl = this.modelBaseUrl.value.trim().replace(/\/$/, '');
+      const modelId = this.modelSelect.value;
+      if (apiKey)  fd.append('api_key',       apiKey);
+      if (baseUrl) fd.append('model_base_url', baseUrl);
+      if (modelId) fd.append('model_id',       modelId);
+
+      const r = await fetch(`${this.apiBase}/translate`, { method: 'POST', body: fd });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.detail || 'Translation failed');
+      }
+      const data = await r.json();
+
+      this.currentTranslation        = data.translation || '';
+      this.rawTranslation            = data.raw_translation || null;
+      this.showTranslationTimestamps = true;
+
+      this.translateEmpty.style.display = 'none';
+      this.translationContent.style.display = '';
+      this.translationContent.innerHTML = marked.parse(this._translationToRender());
+      this._updateTranslationTimestampBtn();
+    } catch (e) {
+      this._showError(this.t('error_translate_failed') + e.message);
+      this.translateEmpty.style.display = '';
+      this.translateEmpty.textContent = this.t('translate_empty');
+    } finally {
+      this.translateBtn.disabled = false;
+      this.translateBtn.innerHTML = `<i class="fas fa-language"></i> <span>${this.t('btn_translate')}</span>`;
+    }
+  }
+
+  _translationToRender() {
+    return (this.showTranslationTimestamps && this.rawTranslation)
+      ? this.rawTranslation : this.currentTranslation;
+  }
+
+  _updateTranslationTimestampBtn() {
+    const hasTs = !!this.rawTranslation;
+    this.translateToolbar.style.display = hasTs ? '' : 'none';
+    this.translateTimestampToggle.classList.toggle('active', this.showTranslationTimestamps);
+    this._updateTranslationDownloadLabel();
+    this.dlTranslation.style.display = this.currentTranslation ? 'inline-flex' : 'none';
+  }
+
+  _updateTranslationDownloadLabel() {
+    const span = this.dlTranslation.querySelector('span');
+    if (!span) return;
+    const isSrt = this.showTranslationTimestamps && !!this.rawTranslation;
+    span.textContent = isSrt ? this.t('download_srt') : this.t('download_txt');
+  }
+
+  _toggleTranslationTimestamps() {
+    this.showTranslationTimestamps = !this.showTranslationTimestamps;
+    this.translateTimestampToggle.classList.toggle('active', this.showTranslationTimestamps);
+    this.translationContent.innerHTML = marked.parse(this._translationToRender());
+    this._updateTranslationDownloadLabel();
+  }
+
+  _downloadTranslation() {
+    if (!this.currentTranslation) { this._showError(this.t('error_no_download')); return; }
+    const isSrt    = this.showTranslationTimestamps && !!this.rawTranslation;
+    const ext      = isSrt ? 'srt' : 'txt';
+    const content  = isSrt ? this._toSRT(this.rawTranslation) : this._toPlainText(this.currentTranslation);
+    const filename = `translation.${ext}`;
+    const basePath = this.savePathInput?.value.trim();
+
+    if (basePath) {
+      this._saveToServer(content, basePath, this._videoFolderName(), filename);
+    } else {
+      this._downloadBlob(content, filename);
+    }
+  }
 
   /* ── Tabs ─────────────────────────────────────────────── */
   _switchTab(name) {
@@ -560,37 +921,415 @@ class VideoTranscriber {
     this.tabPanes.forEach(p => p.classList.toggle('active', p.id === `${name}Tab`));
   }
 
+  /* ── Download helpers ────────────────────────────────── */
+  _safeFilename() {
+    return (this.currentVideoTitle || 'transcript')
+      .replace(/[^\w\-\s]/g, '')
+      .replace(/\s+/g, '_')
+      .slice(0, 60) || 'transcript';
+  }
+
+  _timeToSrt(t) {
+    const parts = t.split(':').map(Number);
+    let h = 0, m = 0, s = 0;
+    if (parts.length === 3) { [h, m, s] = parts; }
+    else                    { [m, s]    = parts; }
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')},000`;
+  }
+
+  _toSRT(rawScript) {
+    const TS_RE = /^\*\*\[(\d{1,2}:\d{2}(?::\d{2})?) - (\d{1,2}:\d{2}(?::\d{2})?)\]\*\*$/;
+    const SKIP_RE = /^(#{1,6}\s|source:|$|\*\*Detected|\*\*Language)/;
+    const lines    = rawScript.split('\n');
+    const segments = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      const m = lines[i].trim().match(TS_RE);
+      if (m) {
+        const start = m[1], end = m[2];
+        const textLines = [];
+        i++;
+        while (i < lines.length && !lines[i].trim().match(TS_RE)) {
+          const ln = lines[i].trim();
+          if (ln && !SKIP_RE.test(ln)) textLines.push(ln);
+          i++;
+        }
+        if (textLines.length) segments.push({ start, end, text: textLines.join('\n') });
+      } else {
+        i++;
+      }
+    }
+
+    if (!segments.length) return rawScript; // fallback: no timestamps parsed
+    return segments.map((seg, idx) =>
+      `${idx + 1}\n${this._timeToSrt(seg.start)} --> ${this._timeToSrt(seg.end)}\n${seg.text}`
+    ).join('\n\n') + '\n';
+  }
+
+  _toPlainText(markdown) {
+    return markdown
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+      .replace(/\*([^*\n]+)\*/g, '$1')
+      .replace(/^\s*[-*]\s+/gm, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/^source:.*$/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  _downloadBlob(content, filename, mime = 'text/plain;charset=utf-8') {
+    const url = URL.createObjectURL(new Blob([content], { type: mime }));
+    const a   = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  _videoFolderName(src = null) {
+    src = src ?? this.currentSource ?? '';
+    if (!src) return 'unknown';
+    try {
+      const u = new URL(src);
+      // YouTube: use `v` query param
+      if (u.hostname.includes('youtube.com')) {
+        return u.searchParams.get('v') || u.pathname.split('/').filter(Boolean).pop() || 'video';
+      }
+      // All others: last non-empty path segment (covers TikTok video ID, etc.)
+      const parts = u.pathname.split('/').filter(Boolean);
+      return parts[parts.length - 1] || 'video';
+    } catch {
+      // Uploaded file: use name without extension
+      return src.replace(/\.[^.]+$/, '').replace(/[^\w\-]/g, '_').slice(0, 60) || 'upload';
+    }
+  }
+
+  _downloadScript() {
+    const isSrt    = this.showTimestamps && !!this.rawScript;
+    const ext      = isSrt ? 'srt' : 'txt';
+    const content  = isSrt ? this._toSRT(this.rawScript) : this._toPlainText(this.currentScript);
+    const filename = `transcript.${ext}`;
+    const basePath = this.savePathInput?.value.trim();
+
+    if (basePath) {
+      this._saveToServer(content, basePath, this._videoFolderName(), filename);
+    } else {
+      this._downloadBlob(content, filename);
+    }
+  }
+
+  async _saveToServerRaw(content, basePath, subfolder, filename) {
+    const fd = new FormData();
+    fd.append('content',   content);
+    fd.append('base_path', basePath);
+    fd.append('subfolder', subfolder);
+    fd.append('filename',  filename);
+    const r = await fetch(`${this.apiBase}/save-file`, { method: 'POST', body: fd });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || 'Save failed');
+    }
+    return (await r.json()).saved_path;
+  }
+
+  async _saveToServer(content, basePath, subfolder, filename) {
+    try {
+      const savedPath = await this._saveToServerRaw(content, basePath, subfolder, filename);
+      this._showSuccess(this.t('file_saved_to') + savedPath);
+    } catch (e) {
+      this._showError(this.t('error_save_failed') + e.message);
+      this._downloadBlob(content, filename);
+    }
+  }
+
   /* ── Download ─────────────────────────────────────────── */
   async _downloadFile(type) {
     if (!this.currentTaskId) { this._showError(this.t('error_no_download')); return; }
     try {
+      // Client-side generation
+      if (type === 'script')      { this._downloadScript();      return; }
+      if (type === 'translation') { this._downloadTranslation(); return; }
+
       const r = await fetch(`${this.apiBase}/task-status/${this.currentTaskId}`);
       if (!r.ok) throw new Error('Failed to get task status');
       const task = await r.json();
 
+      const basename = (p) => p ? p.split(/[\\/]/).pop() : null;
       let filename;
-      if      (type === 'script')      filename = task.script_path      ? task.script_path.split('/').pop()      : `transcript_${task.safe_title||'x'}_${task.short_id||'x'}.md`;
-      else if (type === 'summary')     filename = task.summary_path     ? task.summary_path.split('/').pop()     : `summary_${task.safe_title||'x'}_${task.short_id||'x'}.md`;
-      else if (type === 'translation') filename = task.translation_path ? task.translation_path.split('/').pop() : `translation_${task.safe_title||'x'}_${task.short_id||'x'}.md`;
+      if (type === 'summary') filename = basename(task.summary_path) || `summary_${task.safe_title||'x'}_${task.short_id||'x'}.md`;
       else throw new Error('Unknown type');
 
       const a = document.createElement('a');
       a.href = `${this.apiBase}/download/${encodeURIComponent(filename)}`;
       a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
     } catch (e) {
       this._showError(this.t('error_download_failed') + e.message);
     }
   }
 
+  /* ── Batch transcription ─────────────────────────────── */
+  async _startBatchTranscription() {
+    if (this.batchRunning) return;
+
+    const raw = this.batchUrlsInput.value.trim();
+    if (!raw) { this._showError(this.t('batch_error_empty')); return; }
+
+    const urls = raw.split('\n')
+      .map(u => u.trim())
+      .filter(u => u.startsWith('http://') || u.startsWith('https://'));
+
+    if (!urls.length) { this._showError(this.t('batch_error_empty')); return; }
+
+    const savePath = this.savePathInput.value.trim();
+    if (!savePath) { this._showError(this.t('batch_require_save_path')); return; }
+
+    this.batchRunning = true;
+    this.batchStopped = false;
+    this.batchStopBtn.disabled = false;
+    this.batchStopBtn.style.display = '';
+
+    this._renderBatchList(urls);
+    this.batchResultsPanel.style.display = '';
+    this.batchResultsPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    this._setLoading(true);
+    this._hideError();
+
+    let completed = 0, failed = 0;
+
+    for (let i = 0; i < urls.length; i++) {
+      if (this.batchStopped) {
+        for (let j = i; j < urls.length; j++) {
+          this._updateBatchItem(j, 'cancelled', this.t('batch_status_cancelled'));
+        }
+        break;
+      }
+      this._updateBatchHeader(i, urls.length, completed, failed, false);
+      const ok = await this._processBatchItem(urls[i], i, savePath);
+      if (ok) completed++; else failed++;
+    }
+
+    this.batchRunning = false;
+    this.batchStopped = false;
+    this.batchStopBtn.disabled = true;
+    this._setLoading(false);
+    this._updateBatchHeader(urls.length, urls.length, completed, failed, true);
+  }
+
+  async _processBatchItem(url, index, savePath) {
+    this._updateBatchItem(index, 'processing', this.t('preparing'));
+    try {
+      const fd = new FormData();
+      fd.append('url', url);
+      fd.append('summary_language', this.summaryLangSel.value);
+      const transLang = this.translationLangSel.value;
+      if (transLang) fd.append('translation_language', transLang);
+      const apiKey  = this.apiKeyInput.value.trim();
+      const baseUrl = this.modelBaseUrl.value.trim().replace(/\/$/, '');
+      const modelId = this.modelSelect.value;
+      if (apiKey)  fd.append('api_key',       apiKey);
+      if (baseUrl) fd.append('model_base_url', baseUrl);
+      if (modelId) fd.append('model_id',       modelId);
+
+      const resp = await fetch(`${this.apiBase}/process-video`, { method: 'POST', body: fd });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || 'Submit failed');
+      }
+      const { task_id } = await resp.json();
+
+      const task = await this._waitForBatchTask(task_id, index);
+      if (task.status !== 'completed') throw new Error(task.error || 'Processing failed');
+
+      await this._batchAutoSave(task, url, index, savePath);
+      return true;
+    } catch (e) {
+      this._updateBatchItem(index, 'error', e.message);
+      return false;
+    }
+  }
+
+  _waitForBatchTask(taskId, batchIndex) {
+    return new Promise((resolve) => {
+      let es = null;
+      let pollTimer = null;
+      let settled = false;
+
+      const settle = (task) => {
+        if (settled) return;
+        settled = true;
+        if (es)        { try { es.close();           } catch(_) {} }
+        if (pollTimer) { clearInterval(pollTimer); }
+        resolve(task);
+      };
+
+      const startPolling = () => {
+        const poll = async () => {
+          if (settled) return;
+          try {
+            const r = await fetch(`${this.apiBase}/task-status/${taskId}`);
+            if (r.ok) {
+              const t = await r.json();
+              if (t?.status === 'completed' || t?.status === 'error') {
+                settle(t);
+              } else if (t?.message) {
+                this._updateBatchItem(batchIndex, 'processing', this._translateProgressMsg(t.message), t.progress);
+              }
+            }
+          } catch(_) {}
+        };
+        pollTimer = setInterval(poll, 2500);
+        poll();
+      };
+
+      try {
+        es = new EventSource(`${this.apiBase}/task-stream/${taskId}`);
+        es.onmessage = (ev) => {
+          try {
+            const task = JSON.parse(ev.data);
+            if (task.type === 'heartbeat') return;
+            if (task.message) {
+              this._updateBatchItem(batchIndex, 'processing', this._translateProgressMsg(task.message), task.progress);
+            }
+            if (task.status === 'completed' || task.status === 'error') settle(task);
+          } catch(_) {}
+        };
+        es.onerror = () => {
+          if (es) { try { es.close(); } catch(_) {} es = null; }
+          if (!settled) startPolling();
+        };
+      } catch(_) {
+        startPolling();
+      }
+    });
+  }
+
+  async _batchAutoSave(task, url, batchIndex, savePath) {
+    const folder = this._videoFolderName(url);
+    const saved  = [];
+    const errors = [];
+
+    // Save transcript
+    const hasRaw    = !!task.raw_script;
+    const tContent  = hasRaw ? this._toSRT(task.raw_script) : this._toPlainText(task.script || '');
+    const tFilename = hasRaw ? 'transcript.srt' : 'transcript.txt';
+    try {
+      await this._saveToServerRaw(tContent, savePath, folder, tFilename);
+      saved.push(tFilename);
+    } catch(e) { errors.push(`transcript: ${e.message}`); }
+
+    // Save translation if available
+    if (task.translation) {
+      const hasRawTr = !!task.raw_translation;
+      const trContent  = hasRawTr ? this._toSRT(task.raw_translation) : this._toPlainText(task.translation);
+      const trFilename = hasRawTr ? 'translation.srt' : 'translation.txt';
+      try {
+        await this._saveToServerRaw(trContent, savePath, folder, trFilename);
+        saved.push(trFilename);
+      } catch(e) { errors.push(`translation: ${e.message}`); }
+    }
+
+    if (errors.length && !saved.length) {
+      this._updateBatchItem(batchIndex, 'error', errors.join('; '));
+    } else {
+      const msg = `${folder}/ — ${saved.join(', ')}` + (errors.length ? ` (${errors.join('; ')})` : '');
+      this._updateBatchItem(batchIndex, 'done', msg);
+    }
+  }
+
+  _renderBatchList(urls) {
+    this.batchList.innerHTML = '';
+    urls.forEach((url, i) => {
+      const item = document.createElement('div');
+      item.className = 'batch-item pending';
+      item.id        = `batch-item-${i}`;
+      item.innerHTML =
+        `<div class="batch-item-icon"><i class="fas fa-clock"></i></div>` +
+        `<div class="batch-item-body">` +
+          `<div class="batch-item-url">${this._escHtml(url)}</div>` +
+          `<div class="batch-item-msg" id="batch-msg-${i}">${this.t('batch_status_pending')}</div>` +
+        `</div>`;
+      this.batchList.appendChild(item);
+    });
+    this._updateBatchHeader(0, urls.length, 0, 0, false);
+  }
+
+  _updateBatchItem(index, status, msg, progress) {
+    const item = document.getElementById(`batch-item-${index}`);
+    if (!item) return;
+    item.className = `batch-item ${status}`;
+
+    const icons = {
+      pending:    '<i class="fas fa-clock"></i>',
+      processing: '<i class="fas fa-spinner fa-spin"></i>',
+      done:       '<i class="fas fa-check-circle"></i>',
+      error:      '<i class="fas fa-times-circle"></i>',
+      cancelled:  '<i class="fas fa-ban"></i>',
+    };
+    const iconEl = item.querySelector('.batch-item-icon');
+    const msgEl  = item.querySelector('.batch-item-msg');
+    if (iconEl) iconEl.innerHTML = icons[status] || icons.pending;
+    if (msgEl)  msgEl.textContent = (progress !== undefined && status === 'processing')
+      ? `${msg} (${Math.round(progress)}%)`
+      : msg;
+
+    if (status === 'processing') item.scrollIntoView({ block: 'nearest' });
+  }
+
+  _updateBatchHeader(done, total, completed, failed, finished) {
+    if (!this.batchHeaderText) return;
+    if (finished) {
+      const fn = failed === 0 ? this.t('batch_completed_ok') : this.t('batch_completed_errors');
+      this.batchHeaderText.textContent = typeof fn === 'function'
+        ? (failed === 0 ? fn(completed, total) : fn(completed, failed, total))
+        : String(fn);
+      this.batchStopBtn.style.display = 'none';
+    } else {
+      const fn = this.t('batch_progress');
+      this.batchHeaderText.textContent = typeof fn === 'function' ? fn(done, total) : `${done}/${total}`;
+    }
+  }
+
+  _translateProgressMsg(msg) {
+    const m = (msg || '').toLowerCase();
+    if (m.includes('获取成功') || m.includes('subtitle found'))  return this.t('subtitle_found');
+    if (m.includes('未找到字幕') || m.includes('no subtitle'))  return this.t('no_subtitle');
+    if (m.includes('检测') && m.includes('字幕'))               return this.t('detecting_subtitles');
+    if (m.includes('下载') || m.includes('download'))           return this.t('downloading_video');
+    if (m.includes('解析') || m.includes('pars'))               return this.t('parsing_video');
+    if (m.includes('转录') || m.includes('transcrib'))          return this.t('transcribing_audio');
+    if (m.includes('优化') || m.includes('optimiz'))            return this.t('optimizing_transcript');
+    if (m.includes('翻译') || m.includes('translat'))           return this.t('auto_translating');
+    if (m.includes('摘要') || m.includes('summary'))            return this.t('generating_summary');
+    if (m.includes('完成') || m.includes('done'))               return this.t('completed');
+    return msg;
+  }
+
+  _escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   /* ── UI helpers ───────────────────────────────────────── */
   _setLoading(on) {
-    this.submitBtn.disabled = on;
-    this.submitBtn.innerHTML = on
+    const singleLabel = on
       ? `<span class="spinner"></span> ${this.t('processing')}`
       : `<i class="fas fa-search"></i> <span>${this.t('start_transcription')}</span>`;
+    this.submitBtn.disabled      = on;
+    this.submitBtn.innerHTML     = singleLabel;
+    this.submitFileBtn.disabled  = on;
+    this.submitFileBtn.innerHTML = singleLabel;
+
+    const batchLabel = on
+      ? `<span class="spinner"></span> ${this.t('processing')}`
+      : `<i class="fas fa-layer-group"></i> <span>${this.t('batch_start')}</span>`;
+    this.submitBatchBtn.disabled  = on;
+    this.submitBatchBtn.innerHTML = batchLabel;
   }
 
   _showError(msg) {
@@ -600,6 +1339,14 @@ class VideoTranscriber {
     setTimeout(() => this._hideError(), 6000);
   }
   _hideError() { this.errorBanner.classList.remove('show'); }
+
+  _showSuccess(msg) {
+    this.successMsg.textContent = msg;
+    this.successBanner.classList.add('show');
+    this.successBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => this._hideSuccess(), 5000);
+  }
+  _hideSuccess() { this.successBanner.classList.remove('show'); }
 
   _debounce(fn, ms) {
     let t;
